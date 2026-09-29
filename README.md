@@ -1,147 +1,197 @@
-# ABSA Hackathon
+# Aspect-Based Sentiment Analysis (ABSA) Pipeline
 
-Aspect-Based Sentiment Analysis project for restaurant, laptop, MAMS, and hackathon datasets.
+A end-to-end Aspect-Based Sentiment Analysis system built for hackathon deployment. It extracts fine-grained aspect terms (e.g., `"camera"`, `"battery life"`, `"service"`) from review text and determines the specific sentiment polarity (`positive`, `negative`, `neutral`) for each aspect.
 
-## Project Structure
+---
+
+## 🏗️ System Architecture
+
+The ABSA pipeline is modularly structured into two main stages:
+
+```mermaid
+flowchart TD
+    A[INPUT REVIEW TEXT] --> B[TEXT PREPROCESSING]
+    B --> C[ASPECT EXTRACTION MODEL\nDistilBERT BIO Tagging]
+    C -->|Extracted Aspect Terms| D[ASPECT + REVIEW CONTEXT]
+    D --> E[SENTIMENT CLASSIFIER MODEL\nTransformer / Baseline]
+    E --> F[FINAL ASPECT-SENTIMENT OUTPUT]
+
+    subgraph Pipeline Processing
+    B
+    C
+    D
+    E
+    end
+
+    subgraph Inputs & Outputs
+    A
+    F
+    end
+```
+
+### 1. Aspect Extraction (BIO Token Classification)
+- **Model**: `BIOAspectExtractor` (Token classification using transformer subword embeddings + BIO tagger).
+- **Labels**: `B-ASPECT` (Begin aspect term), `I-ASPECT` (Inside multi-word aspect term), `O` (Outside).
+- **Why Token Classification / BIO Tagging?**
+  - **No Hallucinations**: Unlike generative sequence-to-sequence (seq2seq) models, BIO tagging extracts exact token spans directly from raw input text.
+  - **Multi-Word Precision**: Accurately extracts contiguous multi-word phrases like `"battery life"`, `"screen resolution"`, and `"wine selection"`.
+  - **Generalization**: Uses contextual embeddings to extract unseen aspects in new domain reviews.
+  - **Speed**: Extremely fast to train and run inference within a fast hackathon workflow.
+
+### 2. Aspect Sentiment Classification
+- **Input**: Review text concatenated with the candidate aspect `[TEXT] [ASPECT]`.
+- **Model**: Transformer Sequence Classifier fine-tuned on SemEval, MAMS, and hackathon ABSA data.
+- **Output**: Aspect-level sentiment (`positive`, `negative`, `neutral`) with confidence score.
+
+---
+
+## 📁 Repository Structure
 
 ```text
-ABSA-Hackathon/
+project_file/
+├── app/
+│   └── app.py                      # Streamlit interactive Web UI
 ├── data/
-│   ├── raw/
-│   │   ├── semeval/
-│   │   ├── mams/
-│   │   └── hackathon/
+│   ├── raw/                        # Raw SemEval, MAMS, and Hackathon dataset files
 │   ├── processed/
+│   │   ├── absa.csv                # Normalized ABSA dataset
+│   │   └── aspect_extraction_dataset.json # Sentence-level BIO aspect dataset
 │   └── final/
-├── notebooks/
-│   ├── 01_data_exploration.ipynb
-│   ├── 02_preprocessing.ipynb
-│   ├── 03_baseline.ipynb
-│   └── 04_model_evaluation.ipynb
+├── models/
+│   ├── aspect_extractor/           # Trained BIO aspect extraction model weights
+│   ├── transformer/                # Trained aspect sentiment transformer model
+│   └── baseline.pkl                # TF-IDF + Logistic Regression baseline model
+├── outputs/
+│   ├── submission.csv              # Hackathon submission file
+│   ├── evaluation_report.md        # Comprehensive evaluation & validation report
+│   ├── evaluation_metrics.json     # Quantitative metrics (Accuracy, F1, Precision, Recall)
+│   ├── confusion_matrix.csv        # Confusion matrix CSV
+│   └── sample_predictions.csv      # Sample prediction test results
 ├── src/
 │   ├── data/
-│   │   ├── loader.py
-│   │   └── preprocess.py
+│   │   ├── populate_datasets.py    # Dataset generation & normalization script
+│   │   ├── loader.py              # Data loader utility
+│   │   └── preprocess.py          # Schema mapping & cleaning logic
 │   ├── models/
-│   │   ├── baseline.py
-│   │   └── transformer.py
+│   │   ├── aspect_extractor.py     # BIO Token Classification & span extraction model
+│   │   ├── baseline.py            # Baseline model builder
+│   │   └── transformer.py         # Transformer model builder & dataset definition
 │   ├── training/
-│   │   └── train.py
+│   │   ├── train_aspect_extractor.py  # Train aspect extraction model
+│   │   ├── train_transformer.py       # Fine-tune sentiment transformer
+│   │   └── train.py                   # Train baseline sentiment classifier
 │   ├── evaluation/
-│   │   └── evaluate.py
+│   │   ├── evaluate_aspect_extractor.py # Aspect extraction evaluator
+│   │   ├── evaluate.py                # Sentiment metrics evaluator
+│   │   └── validate_pipeline.py       # Comprehensive 10-scenario validation suite
 │   └── inference/
-│       └── predict.py
-├── app/
-│   └── app.py
-├── models/
-├── outputs/
+│       ├── predict.py             # Modular ABSA Pipeline interface
+│       └── submission.py          # Submission generator & format validator
+├── run_demo.py                     # Convenience runner script
 ├── requirements.txt
-├── README.md
-└── .gitignore
+└── README.md
 ```
 
-### Folder Responsibilities
+---
 
-- `data/raw/`: Original downloaded datasets. Do not overwrite these files.
-- `data/processed/`: Clean records converted to the common ABSA format.
-- `data/final/`: Final train, validation, and test files selected for experiments.
-- `notebooks/`: Exploratory analysis, preprocessing experiments, baseline work, and evaluation.
-- `src/`: Reusable Python code for loading data, modeling, training, evaluation, and prediction.
-- `models/`: Saved model checkpoints and tokenizers.
-- `outputs/`: Metrics, predictions, plots, and experiment logs.
-- `app/`: The Streamlit demo used for inference.
+## 🚀 Step-by-Step Terminal Execution Guide
 
-### Files We Will Create
+### 1. Install Required Packages
 
-- `loader.py`: Read each raw dataset and expose a consistent interface.
-- `preprocess.py`: Validate records and convert them to the common format.
-- `baseline.py`: A simple baseline model for comparison.
-- `transformer.py`: Transformer-based ABSA model code.
-- `train.py`: Training entry point.
-- `evaluate.py`: Metrics and error analysis.
-- `predict.py`: Reusable inference functions for the demo.
-- `app.py`: Streamlit user interface.
-- The four notebooks: One focused notebook for each investigation stage.
-
-## Development Phases
-
-### Phase 1: Understand and Prepare the Data
-
-Explore all datasets, inspect label distributions, convert them to the common format, remove only invalid records, and create train/validation/test splits.
-
-### Phase 2: Train and Evaluate Models
-
-Build a simple baseline, fine-tune a Hugging Face transformer, compare metrics, and inspect aspect-level errors.
-
-### Phase 3: Demo and Final Experiments
-
-Save the best model, connect it to Streamlit, test example sentences, and record final results in `outputs/`.
-
-## Dataset Organization
-
-Place source files here:
-
-- `data/raw/semeval/`: SemEval-2014 Restaurant and Laptop files.
-- `data/raw/mams/`: MAMS ABSA files.
-- `data/raw/hackathon/`: The hackathon dataset exactly as received.
-- `data/processed/`: Normalized files generated from the raw data.
-
-### What the Datasets Contain
-
-- **SemEval-2014 Restaurant**: Reviews with aspect terms such as `food` or `service`, usually with aspect sentiment polarity. Restaurant aspect categories may also be available.
-- **SemEval-2014 Laptop**: Laptop reviews with aspect terms and sentiment polarity. Product aspect categories may also be available.
-- **MAMS ABSA**: Multi-aspect sentences. A single sentence can contain several aspects with different sentiment labels, so each aspect occurrence must remain a separate record.
-- **Hackathon dataset**: Use its provided text, aspect, category, and sentiment fields. First document its actual schema in the preprocessing notebook.
-
-### Important Labels
-
-The main target is aspect sentiment polarity: `positive`, `negative`, `neutral`, and `conflict` when supplied. Preserve aspect terms and their character positions whenever available. Preserve category labels, dataset names, IDs, and any original labels as metadata; do not discard them during normalization.
-
-### Common Processed Format
-
-Store one row per aspect occurrence. Recommended columns:
-
-| Column | Meaning |
-| --- | --- |
-| `id` | Stable unique record ID |
-| `text` | Full original sentence or review sentence |
-| `aspect` | Exact aspect text from the source |
-| `aspect_start` | Character start position, if available |
-| `aspect_end` | Character end position, if available |
-| `category` | Aspect category, if available |
-| `sentiment` | Normalized polarity label |
-| `original_sentiment` | Original source label |
-| `dataset` | `semeval_restaurant`, `semeval_laptop`, `mams`, or `hackathon` |
-| `split` | Original split, if supplied |
-| `source_id` | Original dataset record ID |
-
-The minimum required fields are `id`, `text`, `aspect`, `sentiment`, and `dataset`. Missing optional values should be empty, not invented.
-
-### Normalization and Validation Rules
-
-1. Convert every aspect occurrence into its own row, even when several aspects come from the same sentence.
-2. Normalize equivalent polarity names to lowercase `positive`, `negative`, `neutral`, or `conflict`.
-3. Keep `original_sentiment` and all source metadata for traceability.
-4. Keep raw files unchanged. Write cleaned data only under `data/processed/`.
-5. Reject or quarantine records with missing text, missing aspect, unusable sentiment, or invalid aspect offsets. Record the reason in a validation report.
-6. If offsets are absent but text and aspect are valid, keep the record and leave `aspect_start` and `aspect_end` empty.
-7. Do not silently guess an aspect, sentiment, category, or offset. Preserve uncertain records separately for review.
-
-Preprocessing code will be added after the raw schemas are inspected and this common format is confirmed.
-
-## Setup
-
-Create a virtual environment and install the dependencies:
-
-```bash
-python -m venv .venv
-```
-
-Windows PowerShell:
+In your terminal, run the following command to install all required dependencies:
 
 ```powershell
-.\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
+pip install torch transformers pandas numpy scikit-learn streamlit tabulate
 ```
 
-The project intentionally contains no training or preprocessing implementation yet.
+*(Or if using a virtual environment `.venv`:)*
+```powershell
+python -m pip install -r requirements.txt
+```
+
+---
+
+### 2. Run the Easy Demo Runner (`run_demo.py`)
+
+You can run the entire pipeline test, validation, or Streamlit app using the new `run_demo.py` script:
+
+```powershell
+# Run 10-example pipeline test & 10-scenario validation suite
+python run_demo.py
+
+# Or launch Streamlit directly
+python run_demo.py app
+```
+
+---
+
+### 3. Running Individual Pipeline Commands
+
+#### A. Populate Datasets
+```powershell
+python -m src.data.populate_datasets
+```
+
+#### B. Run ABSA Inference Test (`predict.py`)
+```powershell
+python -m src.inference.predict
+```
+
+#### C. Run Validation Suite & Generate Evaluation Reports
+```powershell
+python -m src.evaluation.validate_pipeline
+```
+*Generates:*
+- `outputs/evaluation_report.md`
+- `outputs/evaluation_metrics.json`
+- `outputs/confusion_matrix.csv`
+- `outputs/sample_predictions.csv`
+
+#### D. Launch Streamlit Web UI
+Use `python -m streamlit` to guarantee Python executes Streamlit correctly without PowerShell path issues:
+
+```powershell
+python -m streamlit run app/app.py
+```
+
+#### E. Generate Final Hackathon Submission File
+```powershell
+python -m src.inference.submission
+```
+*Output saved to:* `outputs/submission.csv`
+
+---
+
+## 🖥️ Streamlit Demo Interface
+
+The Streamlit UI provides an intuitive dashboard for review analysis:
+
+- **Review Input Box**: Enter any raw customer review sentence.
+- **Sample Presets**: Quick-select test reviews from the sidebar.
+- **Extracted Aspects Table**: Clean table listing extracted aspect terms, sentiment polarities, and confidence scores.
+- **Visual Sentiment Badges**: Color-coded badges with sentiment emojis (`Positive 😊`, `Negative 😞`, `Neutral 😐`).
+
+---
+
+## 📊 Dataset Description
+
+The project incorporates annotated aspect-level datasets from standard benchmarks:
+- **SemEval-2014 Task 4 (Laptop & Restaurant)**: Fine-grained aspect terms and sentiment polarities.
+- **MAMS (Multi-Aspect Multi-Sentiment)**: Challenging sentences where every sentence contains at least two aspects with different polarities.
+- **Hackathon Dataset**: Specific product review text, aspect terms, categories, and polarity labels.
+
+---
+
+## ⚠️ Limitations & Edge Cases
+
+1. **Subword Boundary Splits**: Rare or OOD aspect terms can occasionally split into partial subwords if un-tokenized.
+2. **Implicit Aspect Terms**: Sentences with implicit aspects (e.g., *"It costs too much"* implies `price`) without explicit aspect words require category-based classification.
+3. **Complex Sentiment Shifts**: Extremely long sentences with multiple sub-clauses can experience context overlap between nearby aspects.
+
+---
+
+## 🔮 Future Improvements
+
+1. **Joint Extraction-Classification**: Fine-tune a unified multi-task model (e.g., DeBERTa-v3) that predicts BIO tags and aspect polarities simultaneously.
+2. **CRF Layer**: Add a Conditional Random Field (CRF) decoder layer on top of the transformer for optimal BIO state transition constraints.
+3. **LLM Instruction Fine-Tuning**: Fine-tune LLaMA / Mistral using QLoRA for zero-shot domain adaptation to complex review contexts.
