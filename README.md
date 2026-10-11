@@ -1,6 +1,5 @@
 # Aspect-Based Sentiment Analysis (ABSA) Pipeline
 
-
 An end-to-end, high-precision Aspect-Based Sentiment Analysis system built with a clean, verified gold-standard dataset, open-domain syntactic aspect boundary extraction, and a clause-isolated polarity engine that guarantees zero polarity flipping.
 
 ---
